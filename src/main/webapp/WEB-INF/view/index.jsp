@@ -9,7 +9,7 @@
           rel="stylesheet">
 </head>
 <body>
-<form action="processing-payement" method="post">
+<form action="processing-payment" method="post">
     <div class="container">
         <table class="table">
             <tr>
