@@ -14,6 +14,16 @@ public class StudentOrder {
     private Integer amount;
     private String orderStatus;
     private String razorpayOrderId;
+    private String idempotencyKey; // New field for idempotency key
+
+    // Getters and Setters
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public void setIdempotencyKey(String idempotencyKey) {
+        this.idempotencyKey = idempotencyKey;
+    }
 
     public Integer getOrderId() {
         return orderId;

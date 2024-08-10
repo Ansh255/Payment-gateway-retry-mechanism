@@ -77,36 +77,37 @@
         }
     }
     document.getElementById('button').onclick = async function(e) {
-        // Prevent page reload
+    // Prevent page reload
+    e.preventDefault();
+    const order = await createOrder();
+    if (order) {
+        console.log(order);
+
+        var options = {
+            "key": "rzp_test_UWmE1JesLuHaXD",
+            "amount": order.amount,
+            "currency": "INR",
+            "name": "Ansh Gandhi",
+            "description": "Course Payment",
+            "order_id": order.razorpayOrderId,
+            "receipt": order.email,
+            "callback_url": "http://localhost:8080/handle-payment-callback",
+            "prefill": {
+                "name": order.name,
+                "email": order.email,
+                "contact": order.phoneNumber
+            },
+            "theme": {
+                "color": "#3399cc"
+            },
+            "idempotency_key": order.idempotencyKey
+        };
+
+        var rzp = new Razorpay(options);
+        rzp.open();
         e.preventDefault();
-        const order = await createOrder();
-        if (order) {
-            console.log(order);
-
-            var options = {
-                "key": "rzp_test_UWmE1JesLuHaXD",
-                "amount": order.amount,
-                "currency": "INR",
-                "name": "Ansh Gandhi",
-                "description": "Course Payment",
-                "order_id": order.razorpayOrderId,
-                "receipt": order.email,
-                "callback_url": "http://localhost:8080/handle-payment-callback",
-                "prefill": {
-                    "name": order.name,
-                    "email": order.email,
-                    "contact": order.phoneNumber
-                },
-                "theme": {
-                    "color": "#3399cc"
-                }
-            };
-
-            var rzp = new Razorpay(options);
-            rzp.open();
-            e.preventDefault();
-        }
-    };
+    }
+};
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"

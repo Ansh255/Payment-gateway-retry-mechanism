@@ -5,4 +5,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface StudentOrderRepo extends JpaRepository<StudentOrder,Integer> {
 
     StudentOrder findByRazorpayOrderId(String orderId);
+    boolean existsByIdempotencyKey(String idempotencyKey);
+    StudentOrder findByIdempotencyKey(String idempotencyKey);
 }

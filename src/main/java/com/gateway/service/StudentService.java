@@ -8,7 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import com.razorpay.RazorpayClient;
-
+import java.util.UUID;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -36,10 +36,21 @@ public class StudentService {
     private RazorpayClient client;
 
     public StudentOrder createOrder(StudentOrder studentOrder) throws Exception {
+
+        String idempotencyKey = UUID.randomUUID().toString();
+        studentOrder.setIdempotencyKey(idempotencyKey); // Set the key in the order
+
+        // Check if the transaction with the same idempotency key already exists
+        if (studentOrderRepo.existsByIdempotencyKey(idempotencyKey)) {
+            // Return the existing transaction status
+            return studentOrderRepo.findByIdempotencyKey(idempotencyKey);
+        }
+
         JSONObject orderRequest = new JSONObject();
         orderRequest.put("amount", studentOrder.getAmount() * 100);
         orderRequest.put("currency", "INR");
         orderRequest.put("receipt", "txn_" + System.currentTimeMillis());
+
 
         this.client = new RazorpayClient(razorPayKey, razorPaySecret);
 
