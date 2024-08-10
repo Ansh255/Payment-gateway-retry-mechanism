@@ -1,8 +1,8 @@
 package com.gateway.dao;
-
-import com.gateway.dto.StudentOrderVO;
+import com.gateway.dto.StudentOrder;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface StudentOrderRepo extends JpaRepository<StudentOrderVO,Integer> {
+public interface StudentOrderRepo extends JpaRepository<StudentOrder,Integer> {
 
+    StudentOrder findByRazorpayOrderId(String orderId);
 }
