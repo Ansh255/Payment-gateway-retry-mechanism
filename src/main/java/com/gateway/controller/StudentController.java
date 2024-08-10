@@ -20,6 +20,7 @@ public class StudentController {
 
     @PostMapping(value = "processing-payment")
     public ModelAndView createOrder(@ModelAttribute StudentOrderVO studentOrderVO) {
+        System.out.println(studentOrderVO);
         return new ModelAndView("success");
     }
 }

@@ -8,7 +8,17 @@ public class StudentOrderVO {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer orderId;
+    private String name;
     private String email;
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
     private String phoneNumber;
     private String course;
     private Integer amount;
