@@ -1,26 +1,25 @@
 package com.gateway.controller;
 
-import com.gateway.dto.StudentOrder;
+import com.gateway.dto.StudentOrderVO;
 import com.gateway.service.StudentService;
-import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.ModelAndView;
 
 @Controller
 public class StudentController {
 
-    @GetMapping("/")
-    public String init(){
-        return "index";
-    }
-
-//    private StudentOrder studentOrder;
-
     @Autowired
     private StudentService studentService;
 
+    @GetMapping("/")
+    public ModelAndView loadIndex(){
+        return new ModelAndView("index","StudentOrderVO",new StudentOrderVO());
+    }
 
+    @PostMapping(value = "processing-payment")
+    public ModelAndView createOrder(@ModelAttribute StudentOrderVO studentOrderVO) {
+        return new ModelAndView("success");
+    }
 }
