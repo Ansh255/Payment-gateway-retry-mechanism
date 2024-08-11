@@ -76,7 +76,7 @@ public class StudentService {
                     throw new RuntimeException("Failed to create order after " + maxRetries + " attempts", e);
                 }
                 // Calculate the next wait time
-                waitTime = Math.min(waitTime * 2, TimeUnit.MINUTES.toMillis(maxWait));
+                waitTime = Math.min(waitTime * 1, TimeUnit.MINUTES.toMillis(maxWait));
                 try {
                     // Wait before retrying
                     System.out.println("Retrying in " + (waitTime / 1000) + " seconds...");
