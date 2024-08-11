@@ -1,6 +1,8 @@
 package com.gateway.service;
 
+import com.gateway.dao.FailedPaymentRequestRepo;
 import com.gateway.dao.StudentOrderRepo;
+import com.gateway.dto.FailedPaymentRequest;
 import com.gateway.dto.StudentOrder;
 import com.razorpay.Order;
 import org.json.JSONObject;
@@ -8,6 +10,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import com.razorpay.RazorpayClient;
+
+import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -15,9 +19,14 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class StudentService {
 
+    //Autowiring section
     @Autowired
     private StudentOrderRepo studentOrderRepo;
 
+    @Autowired
+    private FailedPaymentRequestRepo failedPaymentRequestRepo;
+
+    //Configuration section for payment
     @Value("${razorpay.key.id}")
     private String razorPayKey;
 
@@ -35,10 +44,12 @@ public class StudentService {
 
     private RazorpayClient client;
 
+    //Service method for custom logic
     public StudentOrder createOrder(StudentOrder studentOrder) throws Exception {
 
         String idempotencyKey = UUID.randomUUID().toString();
         studentOrder.setIdempotencyKey(idempotencyKey); // Set the key in the order
+
 
         // Check if the transaction with the same idempotency key already exists
         if (studentOrderRepo.existsByIdempotencyKey(idempotencyKey)) {
@@ -70,9 +81,16 @@ public class StudentService {
                 // Saving the information in the database and returning the object
                 studentOrderRepo.save(studentOrder);
                 return studentOrder; // Return successful order creation
-            } catch (Exception e) {
+            }
+            catch (Exception e) {
                 retryCount++;
                 if (retryCount >= maxRetries) {
+                    //for failed transactions
+                    FailedPaymentRequest failedPaymentRequest = new FailedPaymentRequest();
+                    failedPaymentRequest.setIdempotencyKey(idempotencyKey);
+                    failedPaymentRequest.setErrorMessage(e.getMessage());
+                    failedPaymentRequest.setTimestamp(LocalDateTime.now());
+                    failedPaymentRequestRepo.save(failedPaymentRequest);
                     throw new RuntimeException("Failed to create order after " + maxRetries + " attempts", e);
                 }
                 // Calculate the next wait time
