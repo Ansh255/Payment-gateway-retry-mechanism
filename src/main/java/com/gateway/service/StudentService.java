@@ -5,11 +5,15 @@ import com.gateway.dao.StudentOrderRepo;
 import com.gateway.dto.FailedPaymentRequest;
 import com.gateway.dto.StudentOrder;
 import com.razorpay.Order;
+import com.razorpay.RazorpayException;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import com.razorpay.RazorpayClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -19,14 +23,14 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class StudentService {
 
-    //Autowiring section
+    private static final Logger logger = LoggerFactory.getLogger(StudentService.class);
+
     @Autowired
     private StudentOrderRepo studentOrderRepo;
 
     @Autowired
     private FailedPaymentRequestRepo failedPaymentRequestRepo;
 
-    //Configuration section for payment
     @Value("${razorpay.key.id}")
     private String razorPayKey;
 
@@ -44,12 +48,9 @@ public class StudentService {
 
     private RazorpayClient client;
 
-    //Service method for custom logic
     public StudentOrder createOrder(StudentOrder studentOrder) throws Exception {
-
         String idempotencyKey = UUID.randomUUID().toString();
         studentOrder.setIdempotencyKey(idempotencyKey); // Set the key in the order
-
 
         // Check if the transaction with the same idempotency key already exists
         if (studentOrderRepo.existsByIdempotencyKey(idempotencyKey)) {
@@ -62,7 +63,6 @@ public class StudentService {
         orderRequest.put("currency", "INR");
         orderRequest.put("receipt", "txn_" + System.currentTimeMillis());
 
-
         this.client = new RazorpayClient(razorPayKey, razorPaySecret);
 
         int retryCount = 0;
@@ -72,47 +72,67 @@ public class StudentService {
             try {
                 // Create order for the request page
                 Order razorPayOrder = client.orders.create(orderRequest);
-                System.out.println(razorPayOrder);
+                logger.info("Razorpay Order created: {}", razorPayOrder);
 
                 // Getting the id from Razorpay and setting for storing in the database
                 studentOrder.setRazorpayOrderId(razorPayOrder.get("id"));
                 studentOrder.setOrderStatus(razorPayOrder.get("status"));
 
                 // Saving the information in the database and returning the object
-                studentOrderRepo.save(studentOrder);
-                return studentOrder; // Return successful order creation
-            }
-            catch (Exception e) {
+                return saveStudentOrder(studentOrder, idempotencyKey);
+            } catch (RazorpayException | JSONException e) {
                 retryCount++;
-                if (retryCount >= maxRetries) {
-                    //for failed transactions
-                    FailedPaymentRequest failedPaymentRequest = new FailedPaymentRequest();
-                    failedPaymentRequest.setIdempotencyKey(idempotencyKey);
-                    failedPaymentRequest.setErrorMessage(e.getMessage());
-                    failedPaymentRequest.setTimestamp(LocalDateTime.now());
-                    failedPaymentRequestRepo.save(failedPaymentRequest);
-                    throw new RuntimeException("Failed to create order after " + maxRetries + " attempts", e);
+                if (handleRetry(retryCount, e.getMessage(), idempotencyKey, waitTime)) {
+                    throw new RuntimeException("Error creating order with Razorpay: " + e.getMessage(), e);
                 }
-                // Calculate the next wait time
-                waitTime = Math.min(waitTime * 1, TimeUnit.MINUTES.toMillis(maxWait));
-                try {
-                    // Wait before retrying
-                    System.out.println("Retrying in " + (waitTime / 1000) + " seconds...");
-                    Thread.sleep(waitTime);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt(); // Restore interrupted status
-                    throw new RuntimeException("Thread interrupted during backoff wait", ie);
+            } catch (Exception e) {
+                retryCount++;
+                if (handleRetry(retryCount, e.getMessage(), idempotencyKey, waitTime)) {
+                    throw new RuntimeException("Failed to create order after " + maxRetries + " attempts", e);
                 }
             }
         }
         return null; // This line should never be reached due to the exception handling
     }
 
+    private StudentOrder saveStudentOrder(StudentOrder studentOrder, String idempotencyKey) {
+        try {
+            return studentOrderRepo.save(studentOrder);
+        } catch (Exception e) {
+            // Log the error and rethrow the exception
+            logger.error("Failed to save student order with idempotency key {}: {}", idempotencyKey, e.getMessage());
+            throw e; // Rethrow to trigger retry logic
+        }
+    }
+
+    private boolean handleRetry(int retryCount, String errorMessage, String idempotencyKey, long waitTime) {
+        if (retryCount >= maxRetries) {
+            // Log and save the failed payment request
+            FailedPaymentRequest failedPaymentRequest = new FailedPaymentRequest();
+            failedPaymentRequest.setIdempotencyKey(idempotencyKey);
+            failedPaymentRequest.setErrorMessage(errorMessage);
+            failedPaymentRequest.setTimestamp(LocalDateTime.now());
+            failedPaymentRequestRepo.save(failedPaymentRequest);
+            return true; // Indicate that max retries have been reached
+        }
+
+        // Calculate the next wait time
+        waitTime = Math.min(waitTime * 1, TimeUnit.MINUTES.toMillis(maxWait)); // Exponential
+        // backoff
+        try {
+            logger.info("Retrying in {} seconds...", waitTime / 1000);
+            Thread.sleep(waitTime);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt(); // Restore interrupted status
+            throw new RuntimeException("Thread interrupted during backoff wait", ie);
+        }
+        return false; // Indicate that retries are still available
+    }
+
     public StudentOrder updateOrder(Map<String, String> responsePayLoad) {
         String razorPayOrderId = responsePayLoad.get("razorpay_order_id");
         StudentOrder orderData = studentOrderRepo.findByRazorpayOrderId(razorPayOrderId);
         orderData.setOrderStatus("PAYMENT_COMPLETED");
-        StudentOrder updatedOrder = studentOrderRepo.save(orderData);
-        return updatedOrder;
+        return studentOrderRepo.save(orderData);
     }
 }
