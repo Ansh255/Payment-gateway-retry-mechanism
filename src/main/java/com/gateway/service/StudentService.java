@@ -56,9 +56,10 @@ public class StudentService {
         studentOrder.setIdempotencyKey(idempotencyKey); // Set the key in the order
 
         // Check if the transaction with the same idempotency key already exists
-        if (studentOrderRepo.existsByIdempotencyKey(idempotencyKey)) {
+        StudentOrder existingOrder = studentOrderRepo.findByIdempotencyKey(idempotencyKey);
+        if (existingOrder != null) {
             // Return the existing transaction status
-            return studentOrderRepo.findByIdempotencyKey(idempotencyKey);
+            return existingOrder;
         }
 
         JSONObject orderRequest = new JSONObject();
@@ -83,15 +84,24 @@ public class StudentService {
 
                 // Saving the information in the database and returning the object
                 return saveStudentOrder(studentOrder, idempotencyKey);
-            }
-            catch (RazorpayException | JSONException e) {
+            } catch (RazorpayException | JSONException e) {
                 retryCount++;
                 if (handleRetry(retryCount, e, idempotencyKey, waitTime)) {
+                    // Check if the order was saved before throwing the exception
+                    StudentOrder retryOrder = studentOrderRepo.findByIdempotencyKey(idempotencyKey);
+                    if (retryOrder != null) {
+                        return retryOrder;
+                    }
                     throw new RuntimeException("Error creating order with Razorpay: " + e.getMessage(), e);
                 }
             } catch (Exception e) {
                 retryCount++;
                 if (handleRetry(retryCount, e, idempotencyKey, waitTime)) {
+                    // Check if the order was saved before throwing the exception
+                    StudentOrder retryOrder = studentOrderRepo.findByIdempotencyKey(idempotencyKey);
+                    if (retryOrder != null) {
+                        return retryOrder;
+                    }
                     throw new RuntimeException("Failed to create order after " + maxRetries + " attempts", e);
                 }
             }
@@ -153,11 +163,33 @@ public class StudentService {
 
 
     public StudentOrder updateOrder(Map<String, String> responsePayLoad) {
-        String razorPayOrderId = responsePayLoad.get("razorpay_order_id");
-        StudentOrder orderData = studentOrderRepo.findByRazorpayOrderId(razorPayOrderId);
-        orderData.setOrderStatus("PAYMENT_COMPLETED");
-        return studentOrderRepo.save(orderData);
-    }
+        if (responsePayLoad == null || !responsePayLoad.containsKey("razorpay_order_id")) {
+            throw new IllegalArgumentException("Invalid payload: Missing razorpay_order_id");
+        }
 
+        String razorPayOrderId = responsePayLoad.get("razorpay_order_id");
+        if (razorPayOrderId == null || razorPayOrderId.isEmpty()) {
+            throw new IllegalArgumentException("Invalid razorpay_order_id");
+        }
+
+        StudentOrder orderData = studentOrderRepo.findByRazorpayOrderId(razorPayOrderId);
+
+        if (orderData == null) {
+            logger.warn("Order with Razorpay Order ID {} not found", razorPayOrderId);
+            throw new RuntimeException("Order not found for Razorpay Order ID: " + razorPayOrderId);
+        }
+
+        // Update the order status
+        orderData.setOrderStatus("PAYMENT_COMPLETED");
+
+        try {
+            StudentOrder updatedOrder = studentOrderRepo.save(orderData);
+            logger.info("Order with Razorpay Order ID {} updated to PAYMENT_COMPLETED", razorPayOrderId);
+            return updatedOrder;
+        } catch (Exception e) {
+            logger.error("Failed to update order with Razorpay Order ID {}: {}", razorPayOrderId, e.getMessage());
+            throw new RuntimeException("Failed to update order", e);
+        }
+    }
 
 }
