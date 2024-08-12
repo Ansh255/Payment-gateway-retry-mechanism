@@ -137,7 +137,8 @@ public class StudentService {
         }
 
         // Calculate the next wait time
-        waitTime = Math.min(waitTime * 2, TimeUnit.MINUTES.toMillis(maxWait)); // Exponential backoff
+        waitTime = Math.min(waitTime * 1, TimeUnit.MINUTES.toMillis(maxWait)); // Exponential
+        // backoff
         try {
             logger.info("Retrying in {} seconds...", waitTime / 1000);
             Thread.sleep(waitTime);
