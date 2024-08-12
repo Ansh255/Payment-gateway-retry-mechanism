@@ -11,6 +11,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 import com.razorpay.RazorpayClient;
 import org.slf4j.Logger;
@@ -49,6 +50,7 @@ public class StudentService {
 
     private RazorpayClient client;
 
+    @Transactional
     public StudentOrder createOrder(StudentOrder studentOrder) throws Exception {
         String idempotencyKey = UUID.randomUUID().toString();
         studentOrder.setIdempotencyKey(idempotencyKey); // Set the key in the order
