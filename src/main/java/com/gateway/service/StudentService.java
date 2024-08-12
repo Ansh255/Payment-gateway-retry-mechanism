@@ -4,6 +4,7 @@ import com.gateway.dao.FailedPaymentRequestRepo;
 import com.gateway.dao.StudentOrderRepo;
 import com.gateway.dto.FailedPaymentRequest;
 import com.gateway.dto.StudentOrder;
+import com.gateway.exceptions.GatewayException;
 import com.razorpay.Order;
 import com.razorpay.RazorpayException;
 import org.json.JSONException;
@@ -80,14 +81,15 @@ public class StudentService {
 
                 // Saving the information in the database and returning the object
                 return saveStudentOrder(studentOrder, idempotencyKey);
-            } catch (RazorpayException | JSONException e) {
+            }
+            catch (RazorpayException | JSONException e) {
                 retryCount++;
-                if (handleRetry(retryCount, e.getMessage(), idempotencyKey, waitTime)) {
+                if (handleRetry(retryCount, e, idempotencyKey, waitTime)) {
                     throw new RuntimeException("Error creating order with Razorpay: " + e.getMessage(), e);
                 }
             } catch (Exception e) {
                 retryCount++;
-                if (handleRetry(retryCount, e.getMessage(), idempotencyKey, waitTime)) {
+                if (handleRetry(retryCount, e, idempotencyKey, waitTime)) {
                     throw new RuntimeException("Failed to create order after " + maxRetries + " attempts", e);
                 }
             }
@@ -105,29 +107,47 @@ public class StudentService {
         }
     }
 
-    private boolean handleRetry(int retryCount, String errorMessage, String idempotencyKey, long waitTime) {
+    private boolean handleRetry(int retryCount, Exception e, String idempotencyKey, long waitTime) throws GatewayException {
         if (retryCount >= maxRetries) {
             // Log and save the failed payment request
             FailedPaymentRequest failedPaymentRequest = new FailedPaymentRequest();
             failedPaymentRequest.setIdempotencyKey(idempotencyKey);
-            failedPaymentRequest.setErrorMessage(errorMessage);
+            failedPaymentRequest.setErrorMessage(e.getMessage());
             failedPaymentRequest.setTimestamp(LocalDateTime.now());
             failedPaymentRequestRepo.save(failedPaymentRequest);
             return true; // Indicate that max retries have been reached
         }
 
+        if (e instanceof GatewayException) {
+            GatewayException gatewayException = (GatewayException) e;
+
+            if (gatewayException.isNetworkError()) {
+                // Handle network errors, log, and retry
+                logger.warn("Network error occurred: {}", e.getMessage());
+            } else if (gatewayException.isPaymentError()) {
+                // Handle payment-related errors, log, and retry
+                logger.warn("Payment error occurred: {}", e.getMessage());
+            } else {
+                // Handle other types of errors
+                logger.warn("An unexpected error occurred: {}", e.getMessage());
+            }
+        } else {
+            // Log and retry for other general exceptions
+            logger.warn("Retrying due to error: {}", e.getMessage());
+        }
+
         // Calculate the next wait time
-        waitTime = Math.min(waitTime * 1, TimeUnit.MINUTES.toMillis(maxWait)); // Exponential
-        // backoff
+        waitTime = Math.min(waitTime * 2, TimeUnit.MINUTES.toMillis(maxWait)); // Exponential backoff
         try {
             logger.info("Retrying in {} seconds...", waitTime / 1000);
             Thread.sleep(waitTime);
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt(); // Restore interrupted status
-            throw new RuntimeException("Thread interrupted during backoff wait", ie);
+            throw new GatewayException("Thread interrupted during backoff wait", ie);
         }
         return false; // Indicate that retries are still available
     }
+
 
     public StudentOrder updateOrder(Map<String, String> responsePayLoad) {
         String razorPayOrderId = responsePayLoad.get("razorpay_order_id");
@@ -135,4 +155,6 @@ public class StudentService {
         orderData.setOrderStatus("PAYMENT_COMPLETED");
         return studentOrderRepo.save(orderData);
     }
+
+
 }
