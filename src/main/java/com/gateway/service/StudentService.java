@@ -184,6 +184,7 @@ public class StudentService {
         try {
             StudentOrder updatedOrder = studentOrderRepo.save(orderData);
             logger.info("Order with Razorpay Order ID {} updated to PAYMENT_COMPLETED", razorPayOrderId);
+            logger.info("Thank you for using service ", razorPayOrderId);
             return updatedOrder;
         } catch (Exception e) {
             logger.error("Failed to update order with Razorpay Order ID {}: {}", razorPayOrderId, e.getMessage());
