@@ -160,8 +160,6 @@ public class StudentService {
         }
         return false; // Indicate that retries are still available
     }
-
-
     public StudentOrder updateOrder(Map<String, String> responsePayLoad) {
         if (responsePayLoad == null || !responsePayLoad.containsKey("razorpay_order_id")) {
             throw new IllegalArgumentException("Invalid payload: Missing razorpay_order_id");
@@ -185,6 +183,7 @@ public class StudentService {
         try {
             StudentOrder updatedOrder = studentOrderRepo.save(orderData);
             logger.info("Order with Razorpay Order ID {} updated to PAYMENT_COMPLETED", razorPayOrderId);
+            logger.info("Thank you for Using the service", razorPayOrderId);
             return updatedOrder;
         } catch (Exception e) {
             logger.error("Failed to update order with Razorpay Order ID {}: {}", razorPayOrderId, e.getMessage());
